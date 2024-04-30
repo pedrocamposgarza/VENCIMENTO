@@ -1,0 +1,98 @@
+import openpyxl
+from tkinter import Tk, filedialog, Text, Scrollbar, END
+from datetime import datetime, timedelta
+import win32com.client as win32
+from tkinter import ttk
+
+
+def selecionar_arquivo():
+    Tk().withdraw()  # Esconde a janela principal
+    arquivo = filedialog.askopenfilename(title="Selecionar arquivo Excel",
+                                         filetypes=[("Arquivos do Excel", "*.xlsx;*.xls")])
+    return arquivo
+
+
+def exibir_datas_e_eventos(arquivo):
+    workbook = openpyxl.load_workbook(arquivo)
+    sheet = workbook.active
+
+    # Itera sobre as linhas da coluna Q
+    eventos = []
+    for row in sheet.iter_rows(min_row=2, max_col=17, max_row=sheet.max_row):
+        data = row[16].value  # Coluna Q é a 17ª (índice 16)
+        evento = row[0].value  # Coluna A é a 1ª (índice 0)
+        nome_cliente = row[2].value  # Coluna C é a 3ª (índice 2)
+
+        # Verifica se é uma string e se é "Não se Aplica"
+        if isinstance(data, str) and data.strip() == "Não se Aplica":
+            continue  # Pula para a próxima iteração
+
+        eventos.append((data, evento, nome_cliente))
+
+    return eventos
+
+
+def verificar_eventos_calendario(eventos_planilha):
+    outlook = win32.Dispatch('Outlook.Application')
+    calendar = outlook.GetNamespace("MAPI").GetDefaultFolder(
+        9).Items  # 9 é o índice da pasta Calendário
+
+    eventos_registrados = []
+    for evento in calendar:
+        # 26 é o valor que representa um compromisso (appointment) no Outlook
+        if evento.Class == 26:
+            eventos_registrados.append((evento.Subject, evento.Start))
+
+    eventos_nao_registrados = []
+    for evento_planilha in eventos_planilha:
+        encontrado = False
+        for evento_registrado in eventos_registrados:
+            if evento_planilha[1] in evento_registrado[0] and evento_planilha[0] == evento_registrado[1].strftime("%d/%m/%Y"):
+                encontrado = True
+                break
+        if not encontrado:
+            eventos_nao_registrados.append(evento_planilha)
+
+    return eventos_nao_registrados
+
+
+def exibir_eventos_na_janela(eventos_nao_registrados):
+    # Criar janela Tkinter
+    root = Tk()
+    root.title("Eventos Não Registrados")
+    root.geometry("400x300")
+
+    # Estilos
+    style = ttk.Style()
+    style.configure("BW.TLabel", foreground="black",
+                    background="white", font=("Arial", 12))
+
+    # Criar caixa de texto com barra de rolagem
+    text_area = Text(root, wrap="word", font=("Arial", 10))
+    scroll = Scrollbar(root, command=text_area.yview)
+    text_area.config(yscrollcommand=scroll.set)
+    text_area.pack(side="left", fill="both", expand=True)
+    scroll.pack(side="right", fill="y")
+
+    # Adicionar eventos não registrados à caixa de texto
+    for evento in eventos_nao_registrados:
+        text_area.insert(END, f"Data: {evento[0]}, Evento: {
+                         evento[2]}, Cliente: {evento[1]}\n")
+
+    root.mainloop()
+
+
+# Abrir janela de seleção de arquivo
+caminho_arquivo = selecionar_arquivo()
+if not caminho_arquivo:  # Se o usuário cancelar a seleção do arquivo
+    print("Nenhum arquivo selecionado.")
+    exit()
+
+# Integrar resultados do primeiro código
+eventos_planilha = exibir_datas_e_eventos(caminho_arquivo)
+
+# Verificar eventos no calendário
+eventos_nao_registrados = verificar_eventos_calendario(eventos_planilha)
+
+# Exibir eventos não registrados em uma janela flutuante
+exibir_eventos_na_janela(eventos_nao_registrados)
