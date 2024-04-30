@@ -43,7 +43,13 @@
 
    ```shell
   pip install icalendar
+   ```
 
+  ```shell
+pip install tk
+   ```
+```shell
+pip install pypiwin32
    ```
 
 ## 5. Preparo
