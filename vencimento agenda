@@ -1,0 +1,103 @@
+import openpyxl
+from tkinter import Tk, filedialog
+from datetime import datetime, timedelta
+import win32com.client as win32
+from icalendar import Calendar, Event
+import tempfile
+
+
+def selecionar_arquivo():
+    Tk().withdraw()  # Esconde a janela principal
+    arquivo = filedialog.askopenfilename(title="Selecionar arquivo Excel",
+                                         filetypes=[("Arquivos do Excel", "*.xlsx;*.xls")])
+    return arquivo
+
+
+def exibir_datas_e_eventos(arquivo):
+    workbook = openpyxl.load_workbook(arquivo)
+    sheet = workbook.active
+
+    # Itera sobre as linhas da coluna Q
+    eventos = []
+    for row in sheet.iter_rows(min_row=2, max_col=17, max_row=sheet.max_row):
+        data = row[16].value  # Coluna Q é a 17ª (índice 16)
+        evento = row[0].value  # Coluna A é a 1ª (índice 0)
+        nome_cliente = row[2].value  # Coluna C é a 3ª (índice 2)
+
+        # Verifica se é uma string e se é "Não se Aplica"
+        if isinstance(data, str) and data.strip() == "Não se Aplica":
+            continue  # Pula para a próxima iteração
+
+        eventos.append((data, evento, nome_cliente))
+
+    return eventos
+
+
+# Abrir janela de seleção de arquivo
+raiz = Tk()
+raiz.withdraw()  # Ocultar a janela principal
+caminho_arquivo = selecionar_arquivo()
+raiz.destroy()  # Fechar a janela após a seleção
+
+if not caminho_arquivo:  # Se o usuário cancelar a seleção do arquivo
+    print("Nenhum arquivo selecionado.")
+    exit()
+
+# Carregar o arquivo Excel
+planilha = openpyxl.load_workbook(caminho_arquivo)
+folha = planilha.active
+
+# Coluna e linha onde estão as datas
+coluna_data = 'A'
+linha_inicial = 2
+
+# Dias antes da data para acionar o alarme
+dias_para_alarme = 7
+
+# Criar objeto do Outlook
+outlook = win32.Dispatch('outlook.application')
+
+
+# Criar convite de calendário com todos os eventos
+cal = Calendar()
+
+# Integrar resultados do primeiro código
+eventos = exibir_datas_e_eventos(caminho_arquivo)
+
+# Loop pelas datas e eventos do primeiro código para criar eventos no calendário
+for data_str, nome_evento, nome_cliente in eventos:
+    # Converter a data de string para datetime
+    data = datetime.strptime(data_str, "%d/%m/%Y")
+
+    # Ajustar a data do evento para dois dias antes
+    data_evento = data - timedelta(days=2)
+
+    # Criar evento para esta data
+    event = Event()
+    event.add('summary', f"Vencimento do {nome_cliente} de {
+              nome_evento} na data {data}")
+    event.add('dtstart', data_evento)
+    event.add('dtend', data_evento + timedelta(hours=1))
+    event.add('description', f"Vencimento do {
+              nome_cliente} de {nome_evento} na data {data}")
+    cal.add_component(event)
+
+# Salvar o convite de calendário em um arquivo temporário
+temp_file_path = tempfile.mktemp(suffix=".ics")
+with open(temp_file_path, 'wb') as temp_file:
+    temp_file.write(cal.to_ical())
+
+print("Convite de calendário criado com sucesso.")
+
+# Agora, você pode enviar este arquivo de convite por e-mail ou disponibilizá-lo para download
+
+# Enviar o convite de calendário por e-mail
+mail = outlook.CreateItem(0)  # 0 para e-mail
+mail.Subject = "Lembrete de Eventos"
+mail.Body = "Por favor, adicione este convite ao seu calendário."
+# Insira o endereço de e-mail do destinatário aqui
+mail.To = "pedro.moreira@garzaif.com.br"
+mail.Attachments.Add(temp_file.name, 1)  # Anexar o convite de calendário
+mail.Send()
+
+print("E-mail enviado com o convite de calendário contendo todos os eventos.")
